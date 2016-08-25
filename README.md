@@ -1,6 +1,4 @@
 # kissdownloader
-Download from KissAnime.to , KissCartoon.me &amp; KissAsian.com
-
 Download anime, cartoon, drama and movies from [KissAnime.to](http://kissanime.to), [KissCartoon.me](http://kisscartoon.me) and [KissAsian.com](http://kissasian.com).
 
 # Dependencies
