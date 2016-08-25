@@ -3,12 +3,11 @@
 # download from kissanime.to, kisscartoon.me, kissasian.com
 
 declare -a types
-declare season
 declare quality
 
 kiss_page() {
     echo "Fetching $1 ..."
-    python3 -c "import cfscrape; print(cfscrape.create_scraper().get('$1').content)"
+    python -c "import cfscrape; print(cfscrape.create_scraper().get('$1').content)"
 }
 
 kiss_episode() {
@@ -56,7 +55,7 @@ kiss_series() {
 
     shift
     until [ -z $1 ] || [[ "$1" =~ ^-.* ]]; do
-        dir="$(grep -oE "href=\"$portion/([Ss]eason-0*$season)?[Ee]pisode-0*([0-9]+-)*$1(-[0-9]+)*(\?id=[0-9]+)?\"" <<< "$page")"
+        dir="$(grep -oE "href=\"$portion/[Ee]pisode-0*([0-9]+-)*$1(-[0-9]+)*(\?id=[0-9]+)?\"" <<< "$page")"
         dir="$(cut -d '"' -f2 <<< "$dir" )" # remove the trailing \"
 
         tmp="$(basename "$dir" | sed -Ee 's/\?.*//' -e 's/[Ee]pisode-[0-9]+//' -e 's/^-//' -e 's/-/, /')"
@@ -73,8 +72,7 @@ kiss_series() {
 
 usage() {
     echo -e "\n$(basename "$0") - download anime, cartoon and movies from kissanime.to, kisscartoon.to and kissasian.to.\n\
-$0 [--series/-s or --episode/-e] [link] [episodes-numbers-if-link-is-a-series] [-n season-for-episode-if-series] [-q/--quality quality] ...\nYou can provide as many links as is technically possible ;) On giving a series, you must follow with at least one episode number.\n\
-Note: You can supply -s [num] as an argument to indicate the particular season the following episodes will be in.\nIf no season is supplied and is needed, it will be asked for.\n" >&2
+$0 [--series/-s or --episode/-e] [link] [episodes-numbers-if-link-is-a-series] [-q/--quality quality] ...\nYou can provide as many links as is technically possible ;) On giving a series, you must follow with at least one episode number.\n" >&2
     exit $1
 }
 
@@ -85,15 +83,15 @@ determine_link() {
 
     if grep -qE '(https?://|www.)?kissanime.to/Anime/([[:alpha:]]+-?)+/?$' <<< "$1"; then
         echo 'anime series'
-    elif grep -qE '(https?://|www.)?kissanime.to/Anime/([[:alpha:]]+-?)+/?([Ss]eason-[0-9]+)?[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?' <<< "$1"; then
+    elif grep -qE '(https?://|www.)?kissanime.to/Anime/([[:alpha:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
         echo 'anime episode'
     elif grep -qE '(https?://|www.)?kisscartoon.me/Cartoon/2/?$' <<< "$1"; then
         echo 'cartoon series'
-    elif grep -qE '(https?://|www.)?kisscartoon.me/Cartoon/([[:alpha:]]+-?)+/?([Ss]eason-[0-9]+)?[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?' <<< "$1"; then
+    elif grep -qE '(https?://|www.)?kisscartoon.me/Cartoon/([[:alpha:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
         echo 'cartoon episode'
     elif grep -qE '(https?://|www.)?kissasian.com/Drama/([[:alpha:]]+-?)+/?$' <<< "$1"; then
         echo 'asian series'
-    elif grep -qE '(https?://|www.)?kissasian.com/Drama/([[:alpha:]]+-?)+/?([Ss]eason-[0-9]+)?[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?' <<< "$1"; then
+    elif grep -qE '(https?://|www.)?kissasian.com/Drama/([[:alpha:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
         echo 'asian episode'
     else
         return 1
@@ -162,10 +160,8 @@ main() {
     local t=0
     while [ "$1" ];do
         case "$1" in
-            -e ) ;;
+            -e | -s ) ;;
             -q ) quality="$1" ;;
-            -s ) season='[0-9]+';;
-            -n ) shift; season="$1";;
             * ) case "${types[$t]}" in
                     *episode) kiss_episode "$1";;
                     *series ) kiss_series "$1" "${@:1}"; shift $?;;
