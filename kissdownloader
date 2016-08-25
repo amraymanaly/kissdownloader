@@ -1,0 +1,180 @@
+#!/bin/bash
+
+# download from kissanime.to, kisscartoon.me, kissasian.com
+
+declare -a types
+declare season
+declare quality
+
+kiss_page() {
+    echo "Fetching $1 ..."
+    python3 -c "import cfscrape; print(cfscrape.create_scraper().get('$1').content)"
+}
+
+kiss_episode() {
+    # $@ episodes links
+
+    local page
+    local options
+    local q
+    local name
+
+    while [ "$1" ]; do
+        page="$(kiss_page "$1")"
+        options="$(grep -oE 'id="selectQuality"\s*>\s*<option\s*(value="[[:print:]]+</option>)\s*</select' <<< "$page")"
+        [ "$quality" ] && q="$(sed -E "s/.*value=\"(.*)\"(\s+selected)?\s*>$quality.*/\1/" <<< "$options")"
+        if [ -z "$quality" ] ||  [ "$q" = "$options" ];then
+            q="$(sed -E 's/.*value="(.*)"\s+selected\s*>[0-9]+p.*/\1/' <<< "$options")"
+            echo "Requested quality ($quality) not found for episode ($1) ... Using default quality ($(sed -E 's/.*value="(.*)"\s+selected\s*>([0-9]+p).*/\2/' <<< "$options"))"
+        fi
+        name="$(sed -Ee 's/\?.*=.*$//' -e 's@.*/(.*/.*)$@\1@' -e 's/-/ /g' -e 's/\// - /' <<< "$1")"
+        echo "Downloading $name .."
+        wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -c "$(_get_kiss_video_url "$q")" -O "$name.mp4"
+        shift
+    done
+
+}
+
+_get_kiss_video_url() {
+    python3 -c 'import js2py;print(js2py.eval_js("var asp={alphabet:\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\",lookup:null,encode:function(a){for(var o,p,r,t=asp.toUtf8(a),h=-1,s=t.length,e=[,,,],u=\"\";++h<s;)return o=t[h],p=t[++h],e[0]=o>>2,e[1]=(3&o)<<4|p>>4,isNaN(p)?e[2]=e[3]=64:(r=t[++h],e[2]=(15&p)<<2|r>>6,e[3]=isNaN(r)?64:63&r),u+=asp.alphabet[e[0]]+asp.alphabet[e[1]]+asp.alphabet[e[2]]+asp.alphabet[e[3]]},wrap:function(a){for(var o=asp.fromUtf8(a),p=0,r=o.length,t=\"\";r>p;)t+=o[p]<128?String.fromCharCode(o[p++]):o[p]>191&&o[p]<224?String.fromCharCode((31&o[p++])<<6|63&o[p++]):String.fromCharCode((15&o[p++])<<12|(63&o[p++])<<6|63&o[p++]);return t},toUtf8:function(a){var o,p=-1,r=a.length,t=[];if(/^[\x00-\x7f]*$/.test(a))for(;++p<r;)t.push(a.charCodeAt(p));else for(;++p<r;)o=a.charCodeAt(p),128>o?t.push(o):2048>o?t.push(o>>6|192,63&o|128):t.push(o>>12|224,o>>6&63|128,63&o|128);return t},fromUtf8:function(a){var o,p=-1,r=[],t=[,,,];if(!asp.lookup){for(o=asp.alphabet.length,asp.lookup={};++p<o;)asp.lookup[asp.alphabet.charAt(p)]=p;p=-1}for(o=a.length;++p<o&&(t[0]=asp.lookup[a.charAt(p)],t[1]=asp.lookup[a.charAt(++p)],r.push(t[0]<<2|t[1]>>4),t[2]=asp.lookup[a.charAt(++p)],64!=t[2])&&(r.push((15&t[1])<<4|t[2]>>2),t[3]=asp.lookup[a.charAt(++p)],64!=t[3]);)r.push((3&t[2])<<6|t[3]);return r}}; asp.wrap(\"'"$1"'\")"))'
+}
+
+is_yes() {
+    [[ "$(read -p "$1")" =~ ^[Yy](es)?$ ]]
+}
+
+kiss_series() {
+    # $1 series link
+    # ${@:1} episodes numbers
+
+    local -a page="$(kiss_page "$1")"
+    local -a head="$(sed -E 's@((https?://|www.)+kiss(anime.to|cartoon.me|asian.com)).*@\1@' <<< "$1")"
+    local -a portion="$(sed -E "s@$head@@" <<< "$1")"
+    local tmp
+    local dir
+    local c=0
+
+    shift
+    until [ -z $1 ] || [[ "$1" =~ ^-.* ]]; do
+        dir="$(grep -oE "href=\"$portion/([Ss]eason-0*$season)?[Ee]pisode-0*([0-9]+-)*$1(-[0-9]+)*(\?id=[0-9]+)?\"" <<< "$page")"
+        dir="$(cut -d '"' -f2 <<< "$dir" )" # remove the trailing \"
+
+        tmp="$(basename "$dir" | sed -Ee 's/\?.*//' -e 's/[Ee]pisode-[0-9]+//' -e 's/^-//' -e 's/-/, /')"
+        if [ -n "$tmp" ]; then
+            is_yes "Episode $1 is attached to episodes $tmp. Download them together ? " || continue
+        fi
+
+        kiss_episode "$head$dir"
+        shift
+        ((++c))
+    done
+    return $c
+}
+
+usage() {
+    echo -e "\n$(basename "$0") - download anime, cartoon and movies from kissanime.to, kisscartoon.to and kissasian.to.\n\
+$0 [--series/-s or --episode/-e] [link] [episodes-numbers-if-link-is-a-series] [-n season-for-episode-if-series] [-q/--quality quality] ...\nYou can provide as many links as is technically possible ;) On giving a series, you must follow with at least one episode number.\n\
+Note: You can supply -s [num] as an argument to indicate the particular season the following episodes will be in.\nIf no season is supplied and is needed, it will be asked for.\n" >&2
+    exit $1
+}
+
+determine_link() {
+    # checks links for patterns
+    # $1: link
+    # returns 1 for none
+
+    if grep -qE '(https?://|www.)?kissanime.to/Anime/([[:alpha:]]+-?)+/?$' <<< "$1"; then
+        echo 'anime series'
+    elif grep -qE '(https?://|www.)?kissanime.to/Anime/([[:alpha:]]+-?)+/?([Ss]eason-[0-9]+)?[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?' <<< "$1"; then
+        echo 'anime episode'
+    elif grep -qE '(https?://|www.)?kisscartoon.me/Cartoon/2/?$' <<< "$1"; then
+        echo 'cartoon series'
+    elif grep -qE '(https?://|www.)?kisscartoon.me/Cartoon/([[:alpha:]]+-?)+/?([Ss]eason-[0-9]+)?[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?' <<< "$1"; then
+        echo 'cartoon episode'
+    elif grep -qE '(https?://|www.)?kissasian.com/Drama/([[:alpha:]]+-?)+/?$' <<< "$1"; then
+        echo 'asian series'
+    elif grep -qE '(https?://|www.)?kissasian.com/Drama/([[:alpha:]]+-?)+/?([Ss]eason-[0-9]+)?[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?' <<< "$1"; then
+        echo 'asian episode'
+    else
+        return 1
+    fi
+}
+
+check_args() {
+  # checks the validity of all args, so that checks won't be all over the place.
+  # also, fills the types array
+
+    local content
+    local type
+    local pass
+
+    while grep -qE '^(-s|--series|-e|--episode|-q|--quality)$' <<< "$1"; do
+        content="$1"
+        pass=false
+
+        if [ "$content" = -s ] || [ "$content" == --series ];then
+            # expecting a series
+            type="$(determine_link "$2")" || usage 1
+            [[ "$type" =~ .*series ]] || usage 1
+            types[${#types[@]}]="$type"
+            shift 2
+            [ "$1" ] || usage 1
+            until [ -z "$1" ] || grep -qE '^(-s|--series|-e|--episode)$' <<< "$1"; do
+                if [ "$1" = -q ] || [ "$1" = --quality ] ; then
+                    [[ "$2" =~ ^(24|36|48|72)0p$ ]] || usage 1
+                    shift 2
+                fi
+                if [ "$1" = -n ];then
+                    grep -qE '^[0-9]+$' <<< "$2" || usage 1
+                    shift 2
+                fi
+                # expecting numbers, at least one
+                { grep -qE '^[0-9]+$' <<< "$1" && pass=true; } || { $pass && break || usage 1; }
+                shift
+                # intercepting a series number
+            done
+        else
+            # expecting episode links
+            shift
+            until [ -z "$1" ] || grep -qE '^(-s|--series)$' <<< "$1"; do
+                if [ "$1" = -q ] || [ "$1" = --quality ] ; then
+                    [[ "$2" =~ ^(24|36|48|72)0p$ ]] || usage 1
+                    shift 2
+                fi
+                type="$(determine_link "$1")" || usage 1
+                [[ "$type" =~ .*episode ]] || usage 1
+                types[${#types[@]}]="$type"
+                shift
+            done
+        fi
+    done
+
+    if [ "$1" ] || [ ${#types[@]} = 0 ]; then
+        usage 1
+    fi
+}
+
+# main execution loop
+main() {
+    # kiss_series http://kissanime.to/Anime/Naruto-Shippuuden {337..400}
+    check_args "$@"
+    # parsing args, confident in their validity!
+    local t=0
+    while [ "$1" ];do
+        case "$1" in
+            -e ) ;;
+            -q ) quality="$1" ;;
+            -s ) season='[0-9]+';;
+            -n ) shift; season="$1";;
+            * ) case "${types[$t]}" in
+                    *episode) kiss_episode "$1";;
+                    *series ) kiss_series "$1" "${@:1}"; shift $?;;
+                esac
+                ((t++));;
+        esac
+        shift
+    done
+}
+
+[ "$1" = '--help' ] && usage 0
+main "$@"
