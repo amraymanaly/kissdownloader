@@ -6,7 +6,7 @@ declare -a types
 declare quality
 
 kiss_page() {
-    echo "Fetching $1 ..."
+    echo "Fetching $1 ..." 1>&2
     python -c "import cfscrape; print(cfscrape.create_scraper().get('$1').content)"
 }
 
@@ -19,27 +19,26 @@ kiss_episode() {
     local name
 
     while [ "$1" ]; do
-        page="$(kiss_page "$1")"
-        options="$(grep -oE 'id="selectQuality"\s*>\s*<option\s*(value="[[:print:]]+</option>)\s*</select' <<< "$page")"
-        [ "$quality" ] && q="$(sed -E "s/.*value=\"(.*)\"(\s+selected)?\s*>$quality.*/\1/" <<< "$options")"
+        page="$(kiss_page "$1")" || { echo "Error fetching: cfscrape returned $?. Skipping .." ; continue; }
+        options="$(grep -oE 'id="selectQuality"\s*>(\s|\\n)*<option\s*(value="[[:print:]]+</option>)\s*</select' <<< "$page")"
+        q="$(sed -E "s/.*value=\"(.*)\"(\s+selected)?\s*>$quality.*/\1/" <<< "$options")"
         if [ -z "$quality" ] ||  [ "$q" = "$options" ];then
             q="$(sed -E 's/.*value="(.*)"\s+selected\s*>[0-9]+p.*/\1/' <<< "$options")"
-            echo "Requested quality ($quality) not found for episode ($1) ... Using default quality ($(sed -E 's/.*value="(.*)"\s+selected\s*>([0-9]+p).*/\2/' <<< "$options"))"
+            echo "Requested quality (${quality:-<none>}) not found for episode ($1) ... Using default quality ($(sed -E 's/.*value="(.*)"\s+selected\s*>([0-9]+p).*/\2/' <<< "$options"))"
         fi
         name="$(sed -Ee 's/\?.*=.*$//' -e 's@.*/(.*/.*)$@\1@' -e 's/-/ /g' -e 's/\// - /' <<< "$1")"
         echo "Downloading $name .."
         wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -c "$(_get_kiss_video_url "$q")" -O "$name.mp4"
         shift
     done
-
 }
 
 _get_kiss_video_url() {
-    python3 -c 'import js2py;print(js2py.eval_js("var asp={alphabet:\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\",lookup:null,encode:function(a){for(var o,p,r,t=asp.toUtf8(a),h=-1,s=t.length,e=[,,,],u=\"\";++h<s;)return o=t[h],p=t[++h],e[0]=o>>2,e[1]=(3&o)<<4|p>>4,isNaN(p)?e[2]=e[3]=64:(r=t[++h],e[2]=(15&p)<<2|r>>6,e[3]=isNaN(r)?64:63&r),u+=asp.alphabet[e[0]]+asp.alphabet[e[1]]+asp.alphabet[e[2]]+asp.alphabet[e[3]]},wrap:function(a){for(var o=asp.fromUtf8(a),p=0,r=o.length,t=\"\";r>p;)t+=o[p]<128?String.fromCharCode(o[p++]):o[p]>191&&o[p]<224?String.fromCharCode((31&o[p++])<<6|63&o[p++]):String.fromCharCode((15&o[p++])<<12|(63&o[p++])<<6|63&o[p++]);return t},toUtf8:function(a){var o,p=-1,r=a.length,t=[];if(/^[\x00-\x7f]*$/.test(a))for(;++p<r;)t.push(a.charCodeAt(p));else for(;++p<r;)o=a.charCodeAt(p),128>o?t.push(o):2048>o?t.push(o>>6|192,63&o|128):t.push(o>>12|224,o>>6&63|128,63&o|128);return t},fromUtf8:function(a){var o,p=-1,r=[],t=[,,,];if(!asp.lookup){for(o=asp.alphabet.length,asp.lookup={};++p<o;)asp.lookup[asp.alphabet.charAt(p)]=p;p=-1}for(o=a.length;++p<o&&(t[0]=asp.lookup[a.charAt(p)],t[1]=asp.lookup[a.charAt(++p)],r.push(t[0]<<2|t[1]>>4),t[2]=asp.lookup[a.charAt(++p)],64!=t[2])&&(r.push((15&t[1])<<4|t[2]>>2),t[3]=asp.lookup[a.charAt(++p)],64!=t[3]);)r.push((3&t[2])<<6|t[3]);return r}}; asp.wrap(\"'"$1"'\")"))'
+    python -c 'import js2py;print(js2py.eval_js("var asp={alphabet:\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\",lookup:null,encode:function(a){for(var o,p,r,t=asp.toUtf8(a),h=-1,s=t.length,e=[,,,],u=\"\";++h<s;)return o=t[h],p=t[++h],e[0]=o>>2,e[1]=(3&o)<<4|p>>4,isNaN(p)?e[2]=e[3]=64:(r=t[++h],e[2]=(15&p)<<2|r>>6,e[3]=isNaN(r)?64:63&r),u+=asp.alphabet[e[0]]+asp.alphabet[e[1]]+asp.alphabet[e[2]]+asp.alphabet[e[3]]},wrap:function(a){for(var o=asp.fromUtf8(a),p=0,r=o.length,t=\"\";r>p;)t+=o[p]<128?String.fromCharCode(o[p++]):o[p]>191&&o[p]<224?String.fromCharCode((31&o[p++])<<6|63&o[p++]):String.fromCharCode((15&o[p++])<<12|(63&o[p++])<<6|63&o[p++]);return t},toUtf8:function(a){var o,p=-1,r=a.length,t=[];if(/^[\x00-\x7f]*$/.test(a))for(;++p<r;)t.push(a.charCodeAt(p));else for(;++p<r;)o=a.charCodeAt(p),128>o?t.push(o):2048>o?t.push(o>>6|192,63&o|128):t.push(o>>12|224,o>>6&63|128,63&o|128);return t},fromUtf8:function(a){var o,p=-1,r=[],t=[,,,];if(!asp.lookup){for(o=asp.alphabet.length,asp.lookup={};++p<o;)asp.lookup[asp.alphabet.charAt(p)]=p;p=-1}for(o=a.length;++p<o&&(t[0]=asp.lookup[a.charAt(p)],t[1]=asp.lookup[a.charAt(++p)],r.push(t[0]<<2|t[1]>>4),t[2]=asp.lookup[a.charAt(++p)],64!=t[2])&&(r.push((15&t[1])<<4|t[2]>>2),t[3]=asp.lookup[a.charAt(++p)],64!=t[3]);)r.push((3&t[2])<<6|t[3]);return r}}; asp.wrap(\"'"$1"'\")"))'
 }
 
 is_yes() {
-    [[ "$(read -p "$1")" =~ ^[Yy](es)?$ ]]
+    [[ "$(read -p "$1")" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 
 kiss_series() {
@@ -81,17 +80,17 @@ determine_link() {
     # $1: link
     # returns 1 for none
 
-    if grep -qE '(https?://|www.)?kissanime.to/Anime/([[:alpha:]]+-?)+/?$' <<< "$1"; then
+    if grep -qE '(https?://|www.)?kissanime.to/Anime/([[:print:]]+-?)+/?$' <<< "$1"; then
         echo 'anime series'
-    elif grep -qE '(https?://|www.)?kissanime.to/Anime/([[:alpha:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
+    elif grep -qE '(https?://|www.)?kissanime.to/Anime/([[:print:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
         echo 'anime episode'
-    elif grep -qE '(https?://|www.)?kisscartoon.me/Cartoon/2/?$' <<< "$1"; then
+    elif grep -qE '(https?://|www.)?kisscartoon.me/Cartoon/([[:print:]]+-?)+/?$' <<< "$1"; then
         echo 'cartoon series'
-    elif grep -qE '(https?://|www.)?kisscartoon.me/Cartoon/([[:alpha:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
+    elif grep -qE '(https?://|www.)?kisscartoon.me/Cartoon/([[:print:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
         echo 'cartoon episode'
-    elif grep -qE '(https?://|www.)?kissasian.com/Drama/([[:alpha:]]+-?)+/?$' <<< "$1"; then
+    elif grep -qE '(https?://|www.)?kissasian.com/Drama/([[:print:]]+-?)+/?$' <<< "$1"; then
         echo 'asian series'
-    elif grep -qE '(https?://|www.)?kissasian.com/Drama/([[:alpha:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
+    elif grep -qE '(https?://|www.)?kissasian.com/Drama/([[:print:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
         echo 'asian episode'
     else
         return 1
@@ -164,7 +163,7 @@ main() {
             -q ) quality="$1" ;;
             * ) case "${types[$t]}" in
                     *episode) kiss_episode "$1";;
-                    *series ) kiss_series "$1" "${@:1}"; shift $?;;
+                    *series ) kiss_series "$1" "${@:2}"; shift $?;;
                 esac
                 ((t++));;
         esac
