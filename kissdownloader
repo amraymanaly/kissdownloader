@@ -19,8 +19,13 @@ kiss_episode() {
     local name
 
     while [ "$1" ]; do
+        tmp="$(basename "$dir" | sed -Ee 's/\?.*//' -e 's/[Ee]pisode-[0-9]+//' -e 's/^-//' -e 's/-/, /')"
+        if [ -n "$tmp" ]; then
+            is_yes "Episode $1 is attached to episodes $tmp. Download them together ? " || continue
+        fi
+
         page="$(kiss_page "$1")" || { echo "Error fetching: cfscrape returned $?. Skipping .." ; continue; }
-        options="$(grep -oE 'id="selectQuality"\s*>(\s|\\n)*<option\s*(value="[[:print:]]+</option>)\s*</select' <<< "$page")"
+        options="$(grep -oE 'id="selectQuality"\s*>(\s|\\n)*<option\s*(value="[[:print:]]+</option>)+' <<< "$page")"
         q="$(sed -E "s/.*value=\"(.*)\"(\s+selected)?\s*>$quality.*/\1/" <<< "$options")"
         if [ -z "$quality" ] ||  [ "$q" = "$options" ];then
             q="$(sed -E 's/.*value="(.*)"\s+selected\s*>[0-9]+p.*/\1/' <<< "$options")"
@@ -28,6 +33,7 @@ kiss_episode() {
         fi
         name="$(sed -Ee 's/\?.*=.*$//' -e 's@.*/(.*/.*)$@\1@' -e 's/-/ /g' -e 's/\// - /' <<< "$1")"
         echo "Downloading $name .."
+        echo "$q"
         wget --retry-connrefused --waitretry=1 --read-timeout=20 --timeout=15 -c "$(_get_kiss_video_url "$q")" -O "$name.mp4"
         shift
     done
@@ -43,30 +49,37 @@ is_yes() {
 
 kiss_series() {
     # $1 series link
-    # ${@:1} episodes numbers
+    # ${@:1} episodes numbers and/or --all
+
+    extract_episode_link() {
+        dir="$(grep -oE "href=\"$portion/[Ee]pisode-0*([0-9]+-)*$1(-[0-9]+)*(\?id=[0-9]+)?\"" <<< "$page")"
+        [ "$dir" ] || return 1
+        dir="$(cut -d '"' -f2 <<< "$dir" )" # remove the trailing \"
+        link="$head$dir"
+    }
 
     local -a page="$(kiss_page "$1")"
     local -a head="$(sed -E 's@((https?://|www.)+kiss(anime.to|cartoon.me|asian.com)).*@\1@' <<< "$1")"
     local -a portion="$(sed -E "s@$head@@" <<< "$1")"
     local tmp
     local dir
+    local link
     local c=0
 
     shift
     until [ -z $1 ] || [[ "$1" =~ ^-.* ]]; do
-        dir="$(grep -oE "href=\"$portion/[Ee]pisode-0*([0-9]+-)*$1(-[0-9]+)*(\?id=[0-9]+)?\"" <<< "$page")"
-        dir="$(cut -d '"' -f2 <<< "$dir" )" # remove the trailing \"
-
-        tmp="$(basename "$dir" | sed -Ee 's/\?.*//' -e 's/[Ee]pisode-[0-9]+//' -e 's/^-//' -e 's/-/, /')"
-        if [ -n "$tmp" ]; then
-            is_yes "Episode $1 is attached to episodes $tmp. Download them together ? " || continue
+        if [ $1 = all ];then
+            while extract_episode_link $c;do
+                kiss_episode "$link"
+                ((++c))
+            done
+        else
+            extract_episode_link "$1"
+            kiss_episode "$link"
         fi
-
-        kiss_episode "$head$dir"
         shift
-        ((++c))
     done
-    return $c
+    unset -f extract_episode_link
 }
 
 usage() {
@@ -80,18 +93,18 @@ determine_link() {
     # $1: link
     # returns 1 for none
 
-    if grep -qE '(https?://|www.)?kissanime.to/Anime/([[:print:]]+-?)+/?$' <<< "$1"; then
-        echo 'anime series'
-    elif grep -qE '(https?://|www.)?kissanime.to/Anime/([[:print:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
+    if grep -qE '(https?://|www.)?kissanime.to/Anime/([[:print:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
         echo 'anime episode'
-    elif grep -qE '(https?://|www.)?kisscartoon.me/Cartoon/([[:print:]]+-?)+/?$' <<< "$1"; then
-        echo 'cartoon series'
+    elif grep -qE '(https?://|www.)?kissanime.to/Anime/([[:print:]]+-?)+/?$' <<< "$1"; then
+            echo 'anime series'
     elif grep -qE '(https?://|www.)?kisscartoon.me/Cartoon/([[:print:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
         echo 'cartoon episode'
-    elif grep -qE '(https?://|www.)?kissasian.com/Drama/([[:print:]]+-?)+/?$' <<< "$1"; then
-        echo 'asian series'
+    elif grep -qE '(https?://|www.)?kisscartoon.me/Cartoon/([[:print:]]+-?)+/?$' <<< "$1"; then
+        echo 'cartoon series'
     elif grep -qE '(https?://|www.)?kissasian.com/Drama/([[:print:]]+-?)+(/|/[Ee]pisode-[0-9]+.*(\?id=[0-9]+)?)' <<< "$1"; then
         echo 'asian episode'
+    elif grep -qE '(https?://|www.)?kissasian.com/Drama/([[:print:]]+-?)+/?$' <<< "$1"; then
+        echo 'asian series'
     else
         return 1
     fi
@@ -121,10 +134,7 @@ check_args() {
                     [[ "$2" =~ ^(24|36|48|72)0p$ ]] || usage 1
                     shift 2
                 fi
-                if [ "$1" = -n ];then
-                    grep -qE '^[0-9]+$' <<< "$2" || usage 1
-                    shift 2
-                fi
+                [ "$1" = all ] && pass=true # do not expect a number
                 # expecting numbers, at least one
                 { grep -qE '^[0-9]+$' <<< "$1" && pass=true; } || { $pass && break || usage 1; }
                 shift
@@ -163,7 +173,7 @@ main() {
             -q ) quality="$1" ;;
             * ) case "${types[$t]}" in
                     *episode) kiss_episode "$1";;
-                    *series ) kiss_series "$1" "${@:2}"; shift $?;;
+                    *series ) kiss_series "$@"; shift $?;;
                 esac
                 ((t++));;
         esac
