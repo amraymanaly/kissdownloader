@@ -7,7 +7,7 @@ declare quality
 
 kiss_page() {
     echo "Fetching $1 ..." 1>&2
-    python -c "import cfscrape; print(cfscrape.create_scraper().get('$1').content)"
+    python3 -c "import cfscrape; print(cfscrape.create_scraper().get('$1').content)"
 }
 
 kiss_episode() {
@@ -29,7 +29,10 @@ kiss_episode() {
         q="$(sed -E "s/.*value=\"(.*)\"(\s+selected)?\s*>$quality.*/\1/" <<< "$options")"
         if [ -z "$quality" ] ||  [ "$q" = "$options" ];then
             q="$(sed -E 's/.*value="(.*)"\s+selected\s*>[0-9]+p.*/\1/' <<< "$options")"
-            echo "Requested quality (${quality:-<none>}) not found for episode ($1) ... Using default quality ($(sed -E 's/.*value="(.*)"\s+selected\s*>([0-9]+p).*/\2/' <<< "$options"))"
+            [ "$quality" ] && echo "Requested quality ($quality) not found for episode ($1)."
+            echo "Using default quality ($(sed -E 's/.*value="(.*)"\s+selected\s*>([0-9]+p).*/\2/' <<< "$options"))"
+        else
+            echo "Using requested quality ($quality)"
         fi
         name="$(sed -Ee 's/\?.*=.*$//' -e 's@.*/(.*/.*)$@\1@' -e 's/-/ /g' -e 's/\// - /' <<< "$1")"
         echo "Downloading $name .."
@@ -40,7 +43,7 @@ kiss_episode() {
 }
 
 _get_kiss_video_url() {
-    python -c 'import js2py;print(js2py.eval_js("var asp={alphabet:\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\",lookup:null,encode:function(a){for(var o,p,r,t=asp.toUtf8(a),h=-1,s=t.length,e=[,,,],u=\"\";++h<s;)return o=t[h],p=t[++h],e[0]=o>>2,e[1]=(3&o)<<4|p>>4,isNaN(p)?e[2]=e[3]=64:(r=t[++h],e[2]=(15&p)<<2|r>>6,e[3]=isNaN(r)?64:63&r),u+=asp.alphabet[e[0]]+asp.alphabet[e[1]]+asp.alphabet[e[2]]+asp.alphabet[e[3]]},wrap:function(a){for(var o=asp.fromUtf8(a),p=0,r=o.length,t=\"\";r>p;)t+=o[p]<128?String.fromCharCode(o[p++]):o[p]>191&&o[p]<224?String.fromCharCode((31&o[p++])<<6|63&o[p++]):String.fromCharCode((15&o[p++])<<12|(63&o[p++])<<6|63&o[p++]);return t},toUtf8:function(a){var o,p=-1,r=a.length,t=[];if(/^[\x00-\x7f]*$/.test(a))for(;++p<r;)t.push(a.charCodeAt(p));else for(;++p<r;)o=a.charCodeAt(p),128>o?t.push(o):2048>o?t.push(o>>6|192,63&o|128):t.push(o>>12|224,o>>6&63|128,63&o|128);return t},fromUtf8:function(a){var o,p=-1,r=[],t=[,,,];if(!asp.lookup){for(o=asp.alphabet.length,asp.lookup={};++p<o;)asp.lookup[asp.alphabet.charAt(p)]=p;p=-1}for(o=a.length;++p<o&&(t[0]=asp.lookup[a.charAt(p)],t[1]=asp.lookup[a.charAt(++p)],r.push(t[0]<<2|t[1]>>4),t[2]=asp.lookup[a.charAt(++p)],64!=t[2])&&(r.push((15&t[1])<<4|t[2]>>2),t[3]=asp.lookup[a.charAt(++p)],64!=t[3]);)r.push((3&t[2])<<6|t[3]);return r}}; asp.wrap(\"'"$1"'\")"))'
+    python3 -c 'import js2py;print(js2py.eval_js("var asp={alphabet:\"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\",lookup:null,encode:function(a){for(var o,p,r,t=asp.toUtf8(a),h=-1,s=t.length,e=[,,,],u=\"\";++h<s;)return o=t[h],p=t[++h],e[0]=o>>2,e[1]=(3&o)<<4|p>>4,isNaN(p)?e[2]=e[3]=64:(r=t[++h],e[2]=(15&p)<<2|r>>6,e[3]=isNaN(r)?64:63&r),u+=asp.alphabet[e[0]]+asp.alphabet[e[1]]+asp.alphabet[e[2]]+asp.alphabet[e[3]]},wrap:function(a){for(var o=asp.fromUtf8(a),p=0,r=o.length,t=\"\";r>p;)t+=o[p]<128?String.fromCharCode(o[p++]):o[p]>191&&o[p]<224?String.fromCharCode((31&o[p++])<<6|63&o[p++]):String.fromCharCode((15&o[p++])<<12|(63&o[p++])<<6|63&o[p++]);return t},toUtf8:function(a){var o,p=-1,r=a.length,t=[];if(/^[\x00-\x7f]*$/.test(a))for(;++p<r;)t.push(a.charCodeAt(p));else for(;++p<r;)o=a.charCodeAt(p),128>o?t.push(o):2048>o?t.push(o>>6|192,63&o|128):t.push(o>>12|224,o>>6&63|128,63&o|128);return t},fromUtf8:function(a){var o,p=-1,r=[],t=[,,,];if(!asp.lookup){for(o=asp.alphabet.length,asp.lookup={};++p<o;)asp.lookup[asp.alphabet.charAt(p)]=p;p=-1}for(o=a.length;++p<o&&(t[0]=asp.lookup[a.charAt(p)],t[1]=asp.lookup[a.charAt(++p)],r.push(t[0]<<2|t[1]>>4),t[2]=asp.lookup[a.charAt(++p)],64!=t[2])&&(r.push((15&t[1])<<4|t[2]>>2),t[3]=asp.lookup[a.charAt(++p)],64!=t[3]);)r.push((3&t[2])<<6|t[3]);return r}}; asp.wrap(\"'"$1"'\")"))'
 }
 
 is_yes() {
@@ -122,7 +125,10 @@ check_args() {
         content="$1"
         pass=false
 
-        if [ "$content" = -s ] || [ "$content" == --series ];then
+        if [ "$1" = -q ] || [ "$1" = --quality ] ; then
+            [[ "$2" =~ ^[0-9]{3,4}p$ ]] || usage 1
+            shift 2
+        elif [ "$content" = -s ] || [ "$content" == --series ];then
             # expecting a series
             type="$(determine_link "$2")" || usage 1
             [[ "$type" =~ .*series ]] || usage 1
@@ -143,15 +149,12 @@ check_args() {
         else
             # expecting episode links
             shift
-            until [ -z "$1" ] || grep -qE '^(-s|--series)$' <<< "$1"; do
-                if [ "$1" = -q ] || [ "$1" = --quality ] ; then
-                    [[ "$2" =~ ^(24|36|48|72)0p$ ]] || usage 1
-                    shift 2
-                fi
+            until [ -z "$1" ] || grep -qE '^-' <<< "$1"; do
                 type="$(determine_link "$1")" || usage 1
                 [[ "$type" =~ .*episode ]] || usage 1
                 types[${#types[@]}]="$type"
                 shift
+                pass=true
             done
         fi
     done
@@ -169,8 +172,8 @@ main() {
     local t=0
     while [ "$1" ];do
         case "$1" in
-            -e | -s ) ;;
-            -q ) quality="$1" ;;
+            -e | --episode | -s | --series ) ;;
+            -q | --quality ) quality="$2" ; shift ;;
             * ) case "${types[$t]}" in
                     *episode) kiss_episode "$1";;
                     *series ) kiss_series "$@"; shift $?;;
