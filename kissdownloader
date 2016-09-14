@@ -20,8 +20,8 @@ kiss_episode() {
 
     while [ "$1" ]; do
         tmp="$(basename "$dir" | sed -Ee 's/\?.*//' -e 's/[Ee]pisode-[0-9]+//' -e 's/^-//' -e 's/-/, /')"
-        if [ -n "$tmp" ]; then
-            is_yes "Episode $1 is attached to episodes $tmp. Download them together ? " || continue
+        if [ -n "$tmp" ] && ! grep -qE '^([[:alpha:]]|, )+$' <<< "$tmp";then
+            is_yes "Episodes $tmp are attached together. Download them together ? " || continue
         fi
 
         page="$(kiss_page "$1")" || { echo "Error fetching: cfscrape returned $?. Skipping .." ; continue; }
@@ -47,7 +47,9 @@ _get_kiss_video_url() {
 }
 
 is_yes() {
-    [[ "$(read -p "$1")" =~ ^[Yy]([Ee][Ss])?$ ]]
+    local r
+    read -p "$1" r
+    [[ "$r" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 
 kiss_series() {
@@ -55,7 +57,7 @@ kiss_series() {
     # ${@:1} episodes numbers and/or --all
 
     extract_episode_link() {
-        dir="$(grep -oE "href=\"$portion/[Ee]pisode-0*([0-9]+-)*$1(-[0-9]+)*(\?id=[0-9]+)?\"" <<< "$page")"
+        dir="$(grep -oE "href=\"$portion/[Ee]pisode-0*([0-9]+-)*$1(-[0-9]+)*(-([[:alpha:]]-?)+)(\?id=[0-9]+)?\"" <<< "$page")"
         [ "$dir" ] || return 1
         dir="$(cut -d '"' -f2 <<< "$dir" )" # remove the trailing \"
         link="$head$dir"
