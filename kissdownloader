@@ -57,7 +57,7 @@ kiss_series() {
     # ${@:1} episodes numbers and/or --all
 
     extract_episode_link() {
-        dir="$(grep -oE "href=\"$portion/[Ee]pisode-0*([0-9]+-)*$1(-[0-9]+)*(-([[:alpha:]]-?)+)(\?id=[0-9]+)?\"" <<< "$page")"
+        dir="$(grep -oE "href=\"$portion/[Ee]pisode-0*([0-9]+-)*$1(-[0-9]+)*(-([[:alpha:]]-?)+)?(\?id=[0-9]+)?\"" <<< "$page")"
         [ "$dir" ] || return 1
         dir="$(cut -d '"' -f2 <<< "$dir" )" # remove the trailing \"
         link="$head$dir"
