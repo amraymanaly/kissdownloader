@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+
+import cfscrape
+import re
+import bs4
+import subprocess
+from sys import argv
+
+scraper = cfscrape.create_scraper()
+
+class Series(object):
+    _VALID_URL_RE = re.compile(r'^https?://(?:www\.)?kissanime\.io/Anime/(?P<pl>(\w|-)+)/?$')
+
+    def __init__(self, page_link):
+        m = Series._VALID_URL_RE.search(page_link)
+        assert m
+        self.series_title = m.group('pl')
+        print('Fetching Series [%s]' % self.series_title)
+
+        page = bs4.BeautifulSoup(scraper.get(page_link).content, 'lxml')
+        eps = page.findAll('div', attrs={'class': 'listing'})[0].findAll('a')
+        eps.reverse()
+
+        self.episodes = [ 'http:' + ep.attrs['href'] for ep in eps ]
+
+    def download_episodes(self, nums, quality):
+        for n in nums:
+            Episode(self.episodes[n-1]).download(quality)
+
+class Episode(object):
+    _VALID_URL_RE = re.compile(r'^https?://(?:www\.)?kissanime\.io/Anime/(?P<pl>(\w|-)+)/(?P<ep>(\w|-)+)\?id=(?P<id>[0-9]+)/?$')
+
+    def __init__(self, page_link):
+        m = Episode._VALID_URL_RE.search(page_link)
+        assert m
+        self.episode_id = m.group('id')
+        self.episode_title = m.group('ep')
+        self.series_title = m.group('pl')
+
+        page = scraper.get(page_link)
+        res = scraper.post('http://kissanime.io/ajax/anime/load_episodes', data = {'episode_id': self.episode_id})
+        self.sources = scraper.post('http://' + res.json()['value'][2:]).json()['playlist'][0]['sources']
+
+    def get_source(self, quality):
+        for src in self.sources:
+            if src['label'] == quality:
+                return src
+
+    def download(self, quality):
+        src = self.get_source(quality)
+        assert src
+        print('Downloading Episode [%s::%s]' % (self.series_title, self.episode_title))
+        subprocess.run(['/usr/bin/wget', src['file'], '-O', self.episode_title + '.' + src['type'], '-c'])
+
+Series(argv[1]).download_episodes([ int(n) for n in argv[2:-1] ], argv[-1])
+
+# ARGS
+# $1: series (e.g http://kissanime.io/Anime/MegaMan-NT-Warrior-Dub)
+# $2, 3, ..., n-1: list numbers (e.g 1 3 6 2 9)
+# $n-1: quality (e.g 480p)
+
+# TEST
+
+# nt_warrior = Series('http://kissanime.io/Anime/MegaMan-NT-Warrior-Dub')
+# nt_warrior.download_episodes([ n for n in range(1, 52) ], '720p')
