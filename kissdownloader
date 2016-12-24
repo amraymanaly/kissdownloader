@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # download from kissanime.to, kisscartoon.me, kissasian.com
+# DEPRECATED - DO NOT USE
 
 declare -a types
 declare quality
