@@ -2,7 +2,10 @@
 Download anime, cartoon, drama and movies from [KissAnime.to](http://kissanime.to), [KissCartoon.me](http://kisscartoon.me) and [KissAsian.com](http://kissasian.com).
 
 # Dependencies
-- Python with [cloudflare-scrape](https://github.com/Anorov/cloudflare-scrape) (Needed to bypass CloudFlare)
+- Python 3
+- [cloudflare-scrape](https://github.com/Anorov/cloudflare-scrape) (Needed to bypass CloudFlare)
+- [beautiful soup 4](https://pypi.python.org/pypi/beautifulsoup4) (Needed to parse HTML)
+- [lxml](https://pypi.python.org/pypi/lxml) (Needed for bs4)
 
 # Usage
 ./kissdownloader [--series/-s or --episode/-e] [link] [episodes-numbers-if-link-is-a-series] [-q/--quality quality] ...
